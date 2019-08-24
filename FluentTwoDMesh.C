@@ -257,6 +257,11 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
               if(n_readin == 4)
               {
                 // std::cout << "n1 n2 c1 c2 " << node1 << " " << node2 << " " << cell1 << " " << cell2 << std::endl;
+                if (cell_id1 == 0)
+                {
+                  std::swap(cell_id1, cell_id2);
+                  std::swap(node_id1, node_id2);
+                }
                 Face face(node_id1, node_id2, cell_id1, cell_id2, face_id++);
                 //face.id() = face_id;
                 Vec3d vec = (_NodeSet[node_id2 - 1]).point() - (_NodeSet[node_id1 - 1]).point();
