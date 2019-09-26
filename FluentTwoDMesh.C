@@ -35,6 +35,26 @@ void FluentTriCell::addFaceAndNodes(const Face * const p_face)
     _node_ids.push_back(node_id2);
 }
 
+void
+FluentTriCell::mark_cell_and_its_neighbor_cells()
+{
+  if (!_is_marked)
+  {
+    _is_marked = true;
+    std::cout << id() << " marked." << std::endl;
+    for (long int i = 0; i < _nb_cell_ids.size(); i++)
+    {
+      //std::cout << "i = " << i << std::endl;
+      long int nb_cell_id = _nb_cell_ids[i];
+      if (nb_cell_id > 0)
+      {
+        FluentTriCell & _nb_cell = (_ptr_mesh->getCellSet())[nb_cell_id-1];
+        _nb_cell.mark_cell_and_its_neighbor_cells();
+      }
+    }
+  }
+}
+
 FluentTwoDMesh::SectionFlag
 FluentTwoDMesh::extractSectionFlag(std::string line)
 {
@@ -49,6 +69,36 @@ FluentTwoDMesh::extractSectionFlag(std::string line)
   else if (line.compare(0, 2, "))") == 0)     return SECTIONEND_FLAG;
   else if (line.compare(0, 3, "(45") == 0)    return ZONES_FLAG;
   else                                        return UNKNOWN_FLAG;
+}
+
+double
+FluentTwoDMesh::node_to_face_distance(const Point & point0, const Point & point1, const Point & point2)
+{
+  double x0 = point0.x(); double y0 = point0.y();
+  double x1 = point1.x(); double y1 = point1.y();
+  double x2 = point2.x(); double y2 = point2.y();
+
+  double dy = y2 - y1;   double dx = x2 - x1;
+
+  //https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
+  double denom = std::sqrt(dy * dy + dx * dx);
+  double nom = std::abs(dy * x0 - dx * y0 + x2 * y1 - y2 * x1);
+
+  return nom / denom;
+}
+
+double
+FluentTwoDMesh::node_to_face_distance(Node & node, Face & face)
+{
+  Point pt0 = node.point();
+
+  long int node_id1 = face.node_id1();
+  long int node_id2 = face.node_id2();
+
+  Point pt1 = _NodeSet.at(node_id1-1).point();
+  Point pt2 = _NodeSet.at(node_id2-1).point();
+
+  return node_to_face_distance(pt0, pt1, pt2);
 }
 
 void
@@ -359,7 +409,7 @@ void
 FluentTwoDMesh::ProcessCellData()
 {
   // We are going to reconstruct cell data from given faces and nodes data
-  _CellSet.resize(_total_Cell_number, FluentTriCell()); //empty container
+  _CellSet.resize(_total_Cell_number, FluentTriCell(this)); //empty container
 
   // std::cout << "ProcessCellData start\n";
   // Loop on faces to update cell info
@@ -460,7 +510,7 @@ FluentTwoDMesh::CheckFaceOrientation()
   }
 
   // test
-  std::vector<Face> int_face = _FaceZoneMap[7];
+  std::vector<Face> & int_face = _FaceZoneMap[7];
   for (int i = 0; i < int_face.size(); i++)
   {
     Face & face = int_face[i];
@@ -477,6 +527,31 @@ FluentTwoDMesh::CheckFaceOrientation()
     Vec3d cross_product = face_vec.cross(ct_to_ct);
     if (cross_product.z() > 0.0)
       std::cout << "FACE = " << i << "WRONG." << std::endl;
+  }
+
+  //setup distance_ratio (for now let's just do interior surfaces)
+  std::cout << "Setup distance_ratio" << std::endl;
+  for (int i = 0; i < int_face.size(); i++)
+  {
+    Face & face = int_face[i];
+    long int node_id1 = face.node_id1();
+    long int node_id2 = face.node_id2();
+    long int cell_id1 = face.cell_id1();
+    long int cell_id2 = face.cell_id2();
+
+    Point pt1 = _NodeSet.at(node_id1-1).point();
+    Point pt2 = _NodeSet.at(node_id2-1).point();
+    Point ct1 = _CellSet[cell_id1-1].centroid();
+    Point ct2 = _CellSet[cell_id2-1].centroid();
+
+    double d1 = node_to_face_distance(ct1, pt1, pt2);
+    double d2 = node_to_face_distance(ct2, pt1, pt2);
+
+    //std::cout << d1 << " " << d2 << std::endl;
+    //std::cout << "r = " << d1 / (d1 + d2) << std::endl;
+
+    //face.set_distance_ratio(d1 / (d1 + d2));
+    face.distance_ratio() = d1 / (d1 + d2);
   }
 }
 

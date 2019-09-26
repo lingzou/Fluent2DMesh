@@ -14,7 +14,9 @@
 #include <map>
 
 #include "Node.h"
-#include "Cell.h"
+//#include "Cell.h"
+
+class FluentTwoDMesh;
 
 class Face {
 public:
@@ -25,15 +27,20 @@ public:
   Face(long int node_id1, long int node_id2, long int cell_id1, long int cell_id2, long int face_id) :
     _node_id1(node_id1), _node_id2(node_id2), _cell_id1(cell_id1), _cell_id2(cell_id2),
     _id(face_id)
-  {}
+  {_distance_ratio = 1.0;}
   const long int node_id1() const { return _node_id1; }
   const long int node_id2() const { return _node_id2; }
   const long int cell_id1() const { return _cell_id1; }
   const long int cell_id2() const { return _cell_id2; }
   const long int id() const { return _id; }
   const double area() const { return _area; }
+  //double distance_ratio() { return _distance_ratio; }
   const Vec3d & faceNormal() const { return _face_normal; }
   inline double & area() { return _area; }
+
+  const double distance_ratio() const { return _distance_ratio; }
+  inline double & distance_ratio() { return _distance_ratio; }
+
   void reorderCells()
   {
     std::swap(_cell_id1, _cell_id2);
@@ -42,16 +49,18 @@ public:
   }
   void setFaceNormal(double x, double y, double z)
   { _face_normal.x() = x; _face_normal.y() = y; _face_normal.z() = z; }
+  //void set_distance_ratio(double value) { _distance_ratio = value; std::cout << "_distance_ratio = " << _distance_ratio << std::endl;}
 
 protected:
   long int _id, _node_id1, _node_id2, _cell_id1, _cell_id2;
   double _area;
   Vec3d _face_normal;
+  double _distance_ratio;
 };
 
 class FluentTriCell {
 public:
-  FluentTriCell() : _id(-1), _volume(-1.0) {}
+  FluentTriCell(FluentTwoDMesh * ptr_mesh) : _id(-1), _volume(-1.0), _is_marked(false), _ptr_mesh(ptr_mesh) {}
   ~FluentTriCell() {}
 
   inline const long int id() const { return _id; }
@@ -84,6 +93,9 @@ public:
   // Therefore, cell data could be reconstructed while not necessarily stored.
   // FluentTriCell(long int face_id1, long int face_id2, long int face_id3);
 
+  bool isMarked() { return _is_marked; }
+  void mark_cell_and_its_neighbor_cells();
+
 protected:
   long int _id;
   double _volume;
@@ -91,12 +103,18 @@ protected:
   std::vector<long int> _node_ids;
   std::vector<long int> _face_ids;
   std::vector<long int> _nb_cell_ids;
+
+  bool _is_marked;
+  FluentTwoDMesh * _ptr_mesh;
 };
 
 class FluentTwoDMesh {
 public:
   FluentTwoDMesh():_dim(2) {}
   ~FluentTwoDMesh() {}
+
+  double node_to_face_distance(const Point & point0, const Point & point1, const Point & point2); // The line is node1 to node2
+  double node_to_face_distance(Node & node, Face & face);
 
   void createMeshFromFile(std::string fileName, bool quiet = true, bool debug = false);
   unsigned const int Dim() const { return _dim; }
@@ -113,7 +131,7 @@ public:
 
   const std::vector<Node> & getNodeSet() const { return _NodeSet; }
   std::map<int, std::vector<Face> > & getFaceZoneMap() { return _FaceZoneMap; }
-  const std::vector<FluentTriCell> & getCellSet() const { return _CellSet; }
+  std::vector<FluentTriCell> & getCellSet() { return _CellSet; }
 
 protected:
   // File parser interfaces
