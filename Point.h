@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <stdlib.h>
+#include <iostream>
 
 class Vec3d {
 public:

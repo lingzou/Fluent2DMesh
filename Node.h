@@ -10,6 +10,10 @@
 #define _Node_h
 
 #include "Point.h"
+#include "FluentTwoDMesh.h"
+
+class Face;
+class FluentTwoDMesh;
 
 class Node
 {
@@ -19,6 +23,7 @@ public:
     _point(p),
     _id(-1) // an invalid id to initialize
   {
+    _connected_faces.clear();
   }
 
   Node(double x, double y, double z)
@@ -28,8 +33,8 @@ public:
     _point.z() = z;
   }
 
-  const unsigned int id() const { return _id; }
-  unsigned int& id() { return _id; }
+  const long int id() const { return _id; }
+  long int& id() { return _id; }
 
   inline const Point & point() const { return _point; }
 
@@ -37,9 +42,19 @@ public:
   const double y() const { return _point.y(); }
   const double z() const { return _point.z(); }
 
+  void addConnectedFace(Face * face) { _connected_faces.push_back(face); }
+
+  void setParentMesh(FluentTwoDMesh * ptr) { _ptr_mesh = ptr; }
+  bool isMarked() { return _is_marked; }
+  void mark_node_and_its_neighbor_nodes();
+
 protected:
   Point _point;
-  unsigned int _id;
+  long int _id;
+
+  std::vector<Face*> _connected_faces;
+  bool _is_marked;
+  FluentTwoDMesh * _ptr_mesh;
 };
 
 

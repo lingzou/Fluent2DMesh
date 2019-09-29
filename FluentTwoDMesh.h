@@ -16,6 +16,7 @@
 #include "Node.h"
 //#include "Cell.h"
 
+class Node;
 class FluentTwoDMesh;
 
 class Face {
@@ -32,6 +33,7 @@ public:
   const long int node_id2() const { return _node_id2; }
   const long int cell_id1() const { return _cell_id1; }
   const long int cell_id2() const { return _cell_id2; }
+  const long int neighbor_node_id(long int node_id);
   const long int id() const { return _id; }
   const double area() const { return _area; }
   //double distance_ratio() { return _distance_ratio; }
@@ -111,10 +113,10 @@ protected:
 class FluentTwoDMesh {
 public:
   FluentTwoDMesh():_dim(2) {}
-  ~FluentTwoDMesh() {}
+  ~FluentTwoDMesh();
 
   double node_to_face_distance(const Point & point0, const Point & point1, const Point & point2); // The line is node1 to node2
-  double node_to_face_distance(Node & node, Face & face);
+  double node_to_face_distance(Node * node, Face & face);
 
   void createMeshFromFile(std::string fileName, bool quiet = true, bool debug = false);
   unsigned const int Dim() const { return _dim; }
@@ -129,8 +131,8 @@ public:
   const unsigned int n_Faces() const { return _total_Face_number; }
   const unsigned int n_Cells() const { return _total_Cell_number; }
 
-  const std::vector<Node> & getNodeSet() const { return _NodeSet; }
-  std::map<int, std::vector<Face> > & getFaceZoneMap() { return _FaceZoneMap; }
+  std::vector<Node*> & getNodeSet() { return _NodeSet; }
+  std::map<int, std::vector<Face*> > & getFaceZoneMap() { return _FaceZoneMap; }
   std::vector<FluentTriCell> & getCellSet() { return _CellSet; }
 
 protected:
@@ -157,8 +159,9 @@ protected:
   long int _total_Face_number;
   long int _total_Cell_number;
 
-  std::vector<Node> _NodeSet;
-  std::map<int, std::vector<Face> > _FaceZoneMap;
+  std::vector<Node*> _NodeSet;
+  std::vector<Face*> _FaceSet;
+  std::map<int, std::vector<Face*> > _FaceZoneMap;
   std::vector<FluentTriCell> _CellSet;
 };
 

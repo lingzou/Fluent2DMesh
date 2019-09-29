@@ -21,6 +21,13 @@ const static std::string TAB6  = "      ";
 const static std::string TAB8  = "        ";
 const static std::string TAB10 = "          ";
 
+const long int
+Face::neighbor_node_id(long int node_id)
+{
+  //std::cout << _node_id1 << " " << _node_id2 << std::endl;
+  return (node_id == _node_id1) ? _node_id2 : _node_id1;
+}
+
 void FluentTriCell::addFaceAndNodes(const Face * const p_face)
 {
   const long int face_id = p_face->id();
@@ -88,17 +95,30 @@ FluentTwoDMesh::node_to_face_distance(const Point & point0, const Point & point1
 }
 
 double
-FluentTwoDMesh::node_to_face_distance(Node & node, Face & face)
+FluentTwoDMesh::node_to_face_distance(Node * node, Face & face)
 {
-  Point pt0 = node.point();
+  Point pt0 = node->point();
 
   long int node_id1 = face.node_id1();
   long int node_id2 = face.node_id2();
 
-  Point pt1 = _NodeSet.at(node_id1-1).point();
-  Point pt2 = _NodeSet.at(node_id2-1).point();
+  Point pt1 = _NodeSet.at(node_id1-1)->point();
+  Point pt2 = _NodeSet.at(node_id2-1)->point();
 
   return node_to_face_distance(pt0, pt1, pt2);
+}
+
+FluentTwoDMesh::~FluentTwoDMesh()
+{
+  for (std::vector<Node*>::iterator it = _NodeSet.begin() ; it != _NodeSet.end(); it++)
+    delete (*it);
+
+  for (std::vector<Face*>::iterator it = _FaceSet.begin() ; it != _FaceSet.end(); it++)
+    delete (*it);
+/*
+  for (std::vector<FluentTriCell*>::iterator it = _CellSet.begin() ; it != _CellSet.end(); it++)
+    delete (*it);
+*/
 }
 
 void
@@ -227,8 +247,9 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
               if(n_readin == dim_node)
               {
                 // std::cout << "x y z " << x << " " << y << " " << z << std::endl;
-                Node node(x, y, z);
-                node.id() = index + 1;    // NOTE: Fluent mesh, node id starts from 1
+                Node * node = new Node(x, y, z);
+                node->id() = index + 1;    // NOTE: Fluent mesh, node id starts from 1
+                node->setParentMesh(this);
                 _NodeSet.push_back(node);
                 index ++;
               }
@@ -289,7 +310,7 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
           {
             //FluentFaceZone face_zone;
             //face_zone.zone_id = zone_id;
-            std::vector<Face> faces;
+            std::vector<Face*> faces;
 
             if(!quiet)
             {
@@ -312,17 +333,25 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
                   std::swap(cell_id1, cell_id2);
                   std::swap(node_id1, node_id2);
                 }
-                Face face(node_id1, node_id2, cell_id1, cell_id2, face_id++);
+                if (face_id == 0) std::cout << "face 0 " << node_id1 << "; " << node_id2 << std::endl;
+                Face * face = new Face(node_id1, node_id2, cell_id1, cell_id2, face_id++);
                 //face.id() = face_id;
-                Vec3d vec = (_NodeSet[node_id2 - 1]).point() - (_NodeSet[node_id1 - 1]).point();
-                face.area() = vec.norm();
-                face.setFaceNormal(vec.y(), -vec.x(), 0.0);
+                Vec3d vec = (_NodeSet[node_id2 - 1])->point() - (_NodeSet[node_id1 - 1])->point();
+                face->area() = vec.norm();
+                face->setFaceNormal(vec.y(), -vec.x(), 0.0);
+
+                //if (node_id1 == 280) std::cout << "280 ->" << node_id2 << "face id = " << face.id() << std::endl;
+                //if (node_id2 == 280) std::cout << "280 ->" << node_id1 << "face id = " << face.id() << std::endl;
 
                 //FaceSet.push_back(face);
                 //face_zone.Faces.push_back(face);
-                faces.push_back(face);
+                _FaceSet.push_back(face); // global face data
+                faces.push_back(face);    // for this zone
                 index ++;
                 //face_id ++;
+
+                _NodeSet[node_id1 - 1]->addConnectedFace(face);
+                _NodeSet[node_id2 - 1]->addConnectedFace(face);
               }
               if(index == face_idx_end - face_idx_begin + 1)
                 faces_data_finished = true;
@@ -374,7 +403,7 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
   /*
   std::cout << "Nodes info:\n";
   for (unsigned int i = 0; i < _NodeSet.size(); i++)
-    std::cout << _NodeSet[i].id() << "    " << _NodeSet[i].x() << "    " << _NodeSet[i].y() << "    " << _NodeSet[i].z() << std::endl;
+    std::cout << _NodeSet[i]->id() << "    " << _NodeSet[i]->x() << "    " << _NodeSet[i]->y() << "    " << _NodeSet[i]->z() << std::endl;
 
   std::cout << "Faces info:\n";
   for (std::map<int, std::vector<Face> >::iterator it = _FaceZoneMap.begin(); it != _FaceZoneMap.end(); ++it)
@@ -413,23 +442,23 @@ FluentTwoDMesh::ProcessCellData()
 
   // std::cout << "ProcessCellData start\n";
   // Loop on faces to update cell info
-  for (std::map<int, std::vector<Face> >::iterator it = _FaceZoneMap.begin(); it != _FaceZoneMap.end(); ++it)
+  for (std::map<int, std::vector<Face*> >::iterator it = _FaceZoneMap.begin(); it != _FaceZoneMap.end(); ++it)
   {
     // std::cout << "Zone id: " << it->first << std::endl;
     for (unsigned int j = 0; j < (it->second).size(); j++)
     {
-      Face & face = (it->second)[j];
-      long int cell_id1 = face.cell_id1();
-      long int cell_id2 = face.cell_id2();
+      Face * face = (it->second)[j];
+      long int cell_id1 = face->cell_id1();
+      long int cell_id2 = face->cell_id2();
 
       if (cell_id1 > 0)
       {
-        _CellSet[cell_id1-1].addFaceAndNodes(&(it->second)[j]);
+        _CellSet[cell_id1-1].addFaceAndNodes((it->second)[j]);
         _CellSet[cell_id1-1].addNeighborCellID(cell_id2);
       }
       if (cell_id2 > 0)
       {
-        _CellSet[cell_id2-1].addFaceAndNodes(&(it->second)[j]);
+        _CellSet[cell_id2-1].addFaceAndNodes((it->second)[j]);
         _CellSet[cell_id2-1].addNeighborCellID(cell_id1);
       }
     }
@@ -449,16 +478,16 @@ FluentTwoDMesh::ProcessCellData()
     double x_centroid = 0.0, y_centroid = 0.0, z_centroid = 0.0;
     for (int k = 0; k < node_ids.size(); k++)
     {
-      x_centroid += _NodeSet[node_ids[k]-1].x() / 3.0;
-      y_centroid += _NodeSet[node_ids[k]-1].y() / 3.0;
-      z_centroid += _NodeSet[node_ids[k]-1].z() / 3.0;
+      x_centroid += _NodeSet[node_ids[k]-1]->x() / 3.0;
+      y_centroid += _NodeSet[node_ids[k]-1]->y() / 3.0;
+      z_centroid += _NodeSet[node_ids[k]-1]->z() / 3.0;
     }
     _CellSet[i].setCentroid(x_centroid, y_centroid, z_centroid);
     _CellSet[i].id() = i + 1;
 
     // area
-    Vec3d face_vec_1 = _NodeSet[node_ids[1] - 1].point() - _NodeSet[node_ids[0] - 1].point();
-    Vec3d face_vec_2 = _NodeSet[node_ids[2] - 1].point() - _NodeSet[node_ids[1] - 1].point();
+    Vec3d face_vec_1 = _NodeSet[node_ids[1] - 1]->point() - _NodeSet[node_ids[0] - 1]->point();
+    Vec3d face_vec_2 = _NodeSet[node_ids[2] - 1]->point() - _NodeSet[node_ids[1] - 1]->point();
     Vec3d cross_product = face_vec_1.cross(face_vec_2);
     if (cross_product.z() < 0)
       _CellSet[i].reorderNodeIDs();
@@ -471,38 +500,38 @@ FluentTwoDMesh::ProcessCellData()
 void
 FluentTwoDMesh::CheckFaceOrientation()
 {
-  for (std::map<int, std::vector<Face> >::iterator it = _FaceZoneMap.begin(); it != _FaceZoneMap.end(); ++it)
+  for (std::map<int, std::vector<Face*> >::iterator it = _FaceZoneMap.begin(); it != _FaceZoneMap.end(); ++it)
   {
     // std::cout << "Zone id: " << it->first << std::endl;
     for (unsigned int j = 0; j < (it->second).size(); j++)
     {
-      Face & face = (it->second)[j];
-      long int node_id1 = face.node_id1();
-      long int node_id2 = face.node_id2();
-      long int cell_id1 = face.cell_id1();
-      long int cell_id2 = face.cell_id2();
+      Face * face = (it->second)[j];
+      long int node_id1 = face->node_id1();
+      long int node_id2 = face->node_id2();
+      long int cell_id1 = face->cell_id1();
+      long int cell_id2 = face->cell_id2();
 
-      Vec3d face_vec = _NodeSet[node_id2 - 1].point() - _NodeSet[node_id1 - 1].point();
+      Vec3d face_vec = _NodeSet[node_id2 - 1]->point() - _NodeSet[node_id1 - 1]->point();
 
       if (cell_id1 > 0)
       {
         const Point ct = _CellSet[cell_id1-1].centroid();
-        Vec3d node2_to_ct = ct - _NodeSet[node_id2 - 1].point();
+        Vec3d node2_to_ct = ct - _NodeSet[node_id2 - 1]->point();
         Vec3d cross_product = face_vec.cross(node2_to_ct);
         if (cross_product.z() < 0.0)
         {
           std::cout << "FACE ID = " << it->first << " SWAP CELLS" << std::endl;
-          face.reorderCells();
+          face->reorderCells();
         }
       }
       else
       {
         const Point ct = _CellSet[cell_id2-1].centroid();
-        Vec3d node2_to_ct = ct - _NodeSet[node_id2 - 1].point();
+        Vec3d node2_to_ct = ct - _NodeSet[node_id2 - 1]->point();
         Vec3d cross_product = face_vec.cross(node2_to_ct);
         if (cross_product.z() > 0.0)
         {
-          face.reorderCells();
+          face->reorderCells();
           std::cout << "FACE ID = " << it->first << " SWAP CELLS" << std::endl;
         }
       }
@@ -510,16 +539,16 @@ FluentTwoDMesh::CheckFaceOrientation()
   }
 
   // test
-  std::vector<Face> & int_face = _FaceZoneMap[7];
+  std::vector<Face*> & int_face = _FaceZoneMap[7];
   for (int i = 0; i < int_face.size(); i++)
   {
-    Face & face = int_face[i];
-    long int node_id1 = face.node_id1();
-    long int node_id2 = face.node_id2();
-    long int cell_id1 = face.cell_id1();
-    long int cell_id2 = face.cell_id2();
+    Face * face = int_face[i];
+    long int node_id1 = face->node_id1();
+    long int node_id2 = face->node_id2();
+    long int cell_id1 = face->cell_id1();
+    long int cell_id2 = face->cell_id2();
 
-    Vec3d face_vec = _NodeSet[node_id2 - 1].point() - _NodeSet[node_id1 - 1].point();
+    Vec3d face_vec = _NodeSet[node_id2 - 1]->point() - _NodeSet[node_id1 - 1]->point();
     Point ct1 = _CellSet[cell_id1-1].centroid();
     Point ct2 = _CellSet[cell_id2-1].centroid();
     Vec3d ct_to_ct = ct2 - ct1;
@@ -533,14 +562,14 @@ FluentTwoDMesh::CheckFaceOrientation()
   std::cout << "Setup distance_ratio" << std::endl;
   for (int i = 0; i < int_face.size(); i++)
   {
-    Face & face = int_face[i];
-    long int node_id1 = face.node_id1();
-    long int node_id2 = face.node_id2();
-    long int cell_id1 = face.cell_id1();
-    long int cell_id2 = face.cell_id2();
+    Face * face = int_face[i];
+    long int node_id1 = face->node_id1();
+    long int node_id2 = face->node_id2();
+    long int cell_id1 = face->cell_id1();
+    long int cell_id2 = face->cell_id2();
 
-    Point pt1 = _NodeSet.at(node_id1-1).point();
-    Point pt2 = _NodeSet.at(node_id2-1).point();
+    Point pt1 = _NodeSet.at(node_id1-1)->point();
+    Point pt2 = _NodeSet.at(node_id2-1)->point();
     Point ct1 = _CellSet[cell_id1-1].centroid();
     Point ct2 = _CellSet[cell_id2-1].centroid();
 
@@ -551,7 +580,7 @@ FluentTwoDMesh::CheckFaceOrientation()
     //std::cout << "r = " << d1 / (d1 + d2) << std::endl;
 
     //face.set_distance_ratio(d1 / (d1 + d2));
-    face.distance_ratio() = d1 / (d1 + d2);
+    face->distance_ratio() = d1 / (d1 + d2);
   }
 }
 
@@ -570,7 +599,7 @@ FluentTwoDMesh::writeMesh(FILE * ptr_File)
 
   out_string_stream << TAB8 << "<DataArray type = \"Float32\" NumberOfComponents=\"3\" format=\"ascii\">" << "\n";
   for(unsigned int i = 0; i < _NodeSet.size(); i++)
-    out_string_stream << TAB10 << _NodeSet[i].x() << TAB2 << _NodeSet[i].y() << TAB2 << _NodeSet[i].z() << "\n";
+    out_string_stream << TAB10 << _NodeSet[i]->x() << TAB2 << _NodeSet[i]->y() << TAB2 << _NodeSet[i]->z() << "\n";
   out_string_stream << TAB8 << "</DataArray>" << "\n";
 
   out_string_stream << TAB6 << "</Points>" << "\n";   // POINTS ends
@@ -649,7 +678,7 @@ FluentTwoDMesh::WriteVTUFile()
 
   out_string_stream << TAB8 << "<DataArray type = \"Float32\" NumberOfComponents=\"3\" format=\"ascii\">" << "\n";
   for(unsigned int i = 0; i < _NodeSet.size(); i++)
-    out_string_stream << TAB10 << _NodeSet[i].x() << TAB2 << _NodeSet[i].y() << TAB2 << _NodeSet[i].z() << "\n";
+    out_string_stream << TAB10 << _NodeSet[i]->x() << TAB2 << _NodeSet[i]->y() << TAB2 << _NodeSet[i]->z() << "\n";
   out_string_stream << TAB8 << "</DataArray>" << "\n";
 
   out_string_stream << TAB6 << "</Points>" << "\n";   // POINTS ends
@@ -709,7 +738,7 @@ FluentTwoDMesh::WriteVTUFile()
   // NODE ID
   out_string_stream << TAB8 << "<DataArray type=\"Float32\" Name=\"Node_ID\" format=\"ascii\">" << "\n";
   for(unsigned int i = 0; i < _total_Node_number; i++)
-    out_string_stream << TAB10 << _NodeSet[i].id() << "\n";
+    out_string_stream << TAB10 << _NodeSet[i]->id() << "\n";
   out_string_stream << TAB8 << "</DataArray>" << "\n";
 
   out_string_stream << TAB6 << "</PointData>" << "\n";
