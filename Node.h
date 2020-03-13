@@ -43,6 +43,7 @@ public:
   const double z() const { return _point.z(); }
 
   void addConnectedFace(Face * face) { _connected_faces.push_back(face); }
+  std::vector<Face*> & getConnectedFace() { return _connected_faces; }
 
   void setParentMesh(FluentTwoDMesh * ptr) { _ptr_mesh = ptr; }
   bool isMarked() { return _is_marked; }

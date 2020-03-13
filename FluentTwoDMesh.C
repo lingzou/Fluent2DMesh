@@ -275,6 +275,7 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
             if(!quiet)
               std::cout << "CELLS: (summary: " << cell_idx_begin << " " << cell_idx_end << ")" << std::endl;
           }
+          /*
           else if (type == 1)
           {
             if(debug)
@@ -287,6 +288,10 @@ FluentTwoDMesh::createMeshFromFile(std::string fileName, bool quiet, bool debug)
           {
             std::cerr << "I don't understand this line " << line << std::endl;
             exit(1);
+          }*/
+          else
+          {
+            // do nothing.
           }
 
           current_line_number++;  // move to the next line
